@@ -3,6 +3,9 @@
 namespace Database\Seeders;
 
 use App\Models\Company;
+use App\Models\Contact;
+use App\Models\Conversation;
+use App\Models\Message;
 use App\Models\Part;
 use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
@@ -25,5 +28,10 @@ class DatabaseSeeder extends Seeder
         ]);
 
         Part::factory()->for($company)->count(5)->create();
+
+        $contact = Contact::factory()->for($company)->create(['name' => 'Maria Silva', 'whatsapp_number' => '5511999999999']);
+        $conversation = Conversation::factory()->for($company)->for($contact)->create();
+        Message::factory()->for($company)->for($conversation)->create(['body' => 'Olá, preciso de uma tela para iPhone 15.']);
+        Message::factory()->for($company)->for($conversation)->create(['body' => 'Olá! Vou verificar para você.', 'direction' => 'outbound', 'sender' => 'bot']);
     }
 }

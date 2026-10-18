@@ -1,0 +1,14 @@
+<script setup lang="ts">
+import { Head, Link, router } from '@inertiajs/vue3';
+import Badge from '@/components/ui/badge/Badge.vue';
+import Button from '@/components/ui/button/Button.vue';
+import Card from '@/components/ui/card/Card.vue';
+import AppLayout from '@/layouts/AppLayout.vue';
+import * as inboxRoutes from '@/routes/inbox';
+type Message = { id: number; body: string; direction: string; sender: string; created_at: string };
+type Conversation = { id: number; status: string; automation_state: string; human_paused_until: string | null; handled_by_name: string | null; contact: { name: string | null; whatsapp_number: string }; messages: Message[] };
+const props = defineProps<{ conversation: Conversation }>();
+function takeOver(): void { router.post(inboxRoutes.takeOver(props.conversation.id).url); }
+function resume(): void { router.post(inboxRoutes.resumeAutomation(props.conversation.id).url); }
+</script>
+<template><Head :title="conversation.contact.name || 'Conversa'" /><AppLayout :breadcrumbs="[{ title: 'Inbox', href: inboxRoutes.index() }, { title: conversation.contact.name || conversation.contact.whatsapp_number, href: inboxRoutes.show(conversation.id) }] "><div class="mx-auto max-w-3xl space-y-5 p-4"><div class="flex flex-wrap items-start justify-between gap-4"><div><h1 class="text-2xl font-semibold">{{ conversation.contact.name || 'Sem nome' }}</h1><p class="text-sm text-muted-foreground">{{ conversation.contact.whatsapp_number }}</p></div><Badge :variant="conversation.automation_state === 'automated' ? 'default' : 'secondary'">{{ conversation.automation_state === 'automated' ? 'Automação ativa' : 'Pausada por humano' }}</Badge></div><Card class="space-y-2 p-4 text-sm"><p><strong>Status:</strong> {{ conversation.status === 'open' ? 'Aberta' : 'Fechada' }}</p><p><strong>Responsável:</strong> {{ conversation.handled_by_name || 'Nenhum' }}</p><p><strong>Pausa até:</strong> {{ conversation.human_paused_until ? new Date(conversation.human_paused_until).toLocaleString('pt-BR') : 'Não pausada' }}</p></Card><div class="flex justify-end gap-3"><Button v-if="conversation.automation_state === 'automated'" @click="takeOver">Assumir por 2 horas</Button><Button v-else variant="outline" @click="resume">Retomar automação</Button></div><Card class="space-y-3 p-4"><h2 class="font-semibold">Histórico</h2><div v-if="conversation.messages.length === 0" class="text-sm text-muted-foreground">Sem mensagens.</div><div v-for="message in conversation.messages" :key="message.id" class="rounded-lg p-3 text-sm" :class="message.direction === 'outbound' ? 'ml-8 bg-muted' : 'mr-8 border'"><div>{{ message.body }}</div><div class="mt-1 text-xs text-muted-foreground">{{ message.sender }} · {{ new Date(message.created_at).toLocaleString('pt-BR') }}</div></div></Card><Button as-child variant="outline"><Link :href="inboxRoutes.index()">Voltar</Link></Button></div></AppLayout></template>
