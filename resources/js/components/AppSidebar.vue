@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Link } from '@inertiajs/vue3';
-import { BookOpen, FolderGit2, LayoutGrid, Package } from '@lucide/vue';
+import { BookOpen, FolderGit2, LayoutGrid, Package, ShoppingCart } from '@lucide/vue';
 import AppLogo from '@/components/AppLogo.vue';
 import NavFooter from '@/components/NavFooter.vue';
 import NavMain from '@/components/NavMain.vue';
@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/sidebar';
 import { dashboard } from '@/routes';
 import * as partRoutes from '@/routes/parts';
+import * as orderRoutes from '@/routes/orders';
 import type { NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
@@ -28,6 +29,11 @@ const mainNavItems: NavItem[] = [
         title: 'Peças',
         href: partRoutes.index(),
         icon: Package,
+    },
+    {
+        title: 'Pedidos',
+        href: orderRoutes.index(),
+        icon: ShoppingCart,
     },
 ];
 

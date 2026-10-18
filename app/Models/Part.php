@@ -51,4 +51,10 @@ class Part extends Model
     {
         return $this->hasMany(InventoryMovement::class);
     }
+
+    /** @return HasMany<OrderItem, $this> */
+    public function orderItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class);
+    }
 }

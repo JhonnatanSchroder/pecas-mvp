@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property int $quantity_delta
  * @property int $balance_after
  * @property string|null $reason
+ * @property int|null $order_id
  */
 class InventoryMovement extends Model
 {
@@ -29,6 +30,7 @@ class InventoryMovement extends Model
         'quantity_delta',
         'balance_after',
         'reason',
+        'order_id',
     ];
 
     protected function casts(): array
@@ -49,5 +51,11 @@ class InventoryMovement extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** @return BelongsTo<Order, $this> */
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
     }
 }
