@@ -12,7 +12,7 @@ class Company extends Model
     /** @use HasFactory<CompanyFactory> */
     use HasFactory;
 
-    protected $fillable = ['name'];
+    protected $fillable = ['name', 'whatsapp_instance_id', 'integration_token_hash'];
 
     /** @return HasMany<User, $this> */
     public function users(): HasMany

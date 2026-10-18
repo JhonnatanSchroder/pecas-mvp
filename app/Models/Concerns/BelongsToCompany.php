@@ -20,8 +20,10 @@ trait BelongsToCompany
             /** @var User|null $user */
             $user = auth()->user();
 
-            if ($user !== null) {
-                $model->company_id = $user->company_id;
+            $companyId = $user !== null ? $user->company_id : request()->attributes->get('integration_company_id');
+
+            if ($companyId !== null) {
+                $model->company_id = $companyId;
             }
         });
     }
@@ -43,10 +45,12 @@ trait BelongsToCompany
         /** @var User|null $user */
         $user = auth()->user();
 
-        if ($user === null || $user->company_id === null) {
+        $companyId = $user !== null ? $user->company_id : request()->attributes->get('integration_company_id');
+
+        if ($companyId === null) {
             throw new LogicException('Company-scoped queries require an authenticated user with a company.');
         }
 
-        return $query->where($query->qualifyColumn('company_id'), $user->company_id);
+        return $query->where($query->qualifyColumn('company_id'), $companyId);
     }
 }

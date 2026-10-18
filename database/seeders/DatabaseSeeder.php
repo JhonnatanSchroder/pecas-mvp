@@ -22,6 +22,11 @@ class DatabaseSeeder extends Seeder
     {
         $company = Company::firstOrCreate(['name' => 'Example Parts Supplier']);
 
+        $integrationToken = config('integrations.development_token');
+        if (is_string($integrationToken) && $integrationToken !== '') {
+            $company->update(['integration_token_hash' => hash('sha256', $integrationToken)]);
+        }
+
         User::factory()->for($company)->admin()->create([
             'name' => 'Local Admin',
             'email' => 'admin@example.test',
