@@ -30,13 +30,14 @@ const form = useForm({
 });
 
 function submit(): void {
-    form.transform((data) => ({
+    form.transform(({ stock_quantity, ...data }) => ({
         ...data,
         sku: data.sku || null,
         aliases: data.aliases
             .split('\n')
             .map((alias) => alias.trim())
             .filter(Boolean),
+        ...(props.part ? {} : { stock_quantity }),
     }));
 
     if (props.part) {
@@ -90,7 +91,7 @@ function formatPrice(cents: number): string {
                             >{{ form.errors.name }}</span
                         ></label
                     >
-                    <label class="space-y-2"
+                    <label v-if="!part" class="space-y-2"
                         ><span class="text-sm font-medium"
                             >Marca do celular</span
                         ><Input v-model="form.phone_brand" /><span

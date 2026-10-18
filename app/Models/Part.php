@@ -6,6 +6,7 @@ use App\Models\Concerns\BelongsToCompany;
 use Database\Factories\PartFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -43,5 +44,11 @@ class Part extends Model
             'price_cents' => 'integer',
             'stock_quantity' => 'integer',
         ];
+    }
+
+    /** @return HasMany<InventoryMovement, $this> */
+    public function inventoryMovements(): HasMany
+    {
+        return $this->hasMany(InventoryMovement::class);
     }
 }

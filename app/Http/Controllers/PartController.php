@@ -2,11 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\InventoryAdjustmentRequest;
 use App\Http\Requests\PartRequest;
+use App\Models\InventoryMovement;
 use App\Models\Part;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -51,7 +55,19 @@ class PartController extends Controller
     {
         Gate::authorize('create', Part::class);
 
-        Part::create($request->validated());
+        DB::transaction(function () use ($request): void {
+            $part = Part::create($request->validated());
+
+            if ($part->stock_quantity > 0) {
+                InventoryMovement::create([
+                    'part_id' => $part->id,
+                    'user_id' => $request->user()->id,
+                    'type' => 'initial',
+                    'quantity_delta' => $part->stock_quantity,
+                    'balance_after' => $part->stock_quantity,
+                ]);
+            }
+        });
 
         return to_route('parts.index')->with('success', 'Peça cadastrada com sucesso.');
     }
@@ -90,6 +106,75 @@ class PartController extends Controller
         return to_route('parts.index')->with('success', 'Peça excluída com sucesso.');
     }
 
+    public function inventoryHistory(Part $part): Response
+    {
+        Gate::authorize('view', $part);
+
+        $movements = InventoryMovement::query()
+            ->forCurrentCompany()
+            ->where('part_id', $part->id)
+            ->with('user:id,name')
+            ->latest()
+            ->get()
+            ->map(fn (InventoryMovement $movement): array => [
+                'id' => $movement->id,
+                'type' => $movement->type,
+                'quantity_delta' => $movement->quantity_delta,
+                'balance_after' => $movement->balance_after,
+                'reason' => $movement->reason,
+                'user_name' => $movement->user?->name,
+                'created_at' => $movement->created_at->toIso8601String(),
+            ]);
+
+        return Inertia::render('parts/InventoryHistory', [
+            'part' => $this->partData($part),
+            'movements' => $movements,
+            'canAdjustInventory' => Gate::allows('adjustInventory', $part),
+        ]);
+    }
+
+    public function createInventoryAdjustment(Part $part): Response
+    {
+        Gate::authorize('adjustInventory', $part);
+
+        return Inertia::render('parts/InventoryAdjustment', ['part' => $this->partData($part)]);
+    }
+
+    public function storeInventoryAdjustment(InventoryAdjustmentRequest $request, Part $part): RedirectResponse
+    {
+        Gate::authorize('adjustInventory', $part);
+
+        $validated = $request->validated();
+
+        DB::transaction(function () use ($part, $request, $validated): void {
+            $lockedPart = Part::query()
+                ->forCurrentCompany()
+                ->lockForUpdate()
+                ->findOrFail($part->id);
+
+            $balanceAfter = $lockedPart->stock_quantity + $validated['quantity_delta'];
+
+            if ($balanceAfter < 0) {
+                throw ValidationException::withMessages([
+                    'quantity_delta' => 'O ajuste deixaria o estoque negativo.',
+                ]);
+            }
+
+            $lockedPart->update(['stock_quantity' => $balanceAfter]);
+
+            InventoryMovement::create([
+                'part_id' => $lockedPart->id,
+                'user_id' => $request->user()->id,
+                'type' => 'adjustment',
+                'quantity_delta' => $validated['quantity_delta'],
+                'balance_after' => $balanceAfter,
+                'reason' => $validated['reason'],
+            ]);
+        });
+
+        return to_route('parts.inventory-history', $part)->with('success', 'Estoque ajustado com sucesso.');
+    }
+
     /** @return array<string, mixed> */
     private function partData(Part $part): array
     {
@@ -103,6 +188,7 @@ class PartController extends Controller
             'stock_quantity' => $part->stock_quantity,
             'aliases' => $part->aliases,
             'is_active' => $part->is_active,
+            'can_adjust_inventory' => Gate::allows('adjustInventory', $part),
         ];
     }
 }

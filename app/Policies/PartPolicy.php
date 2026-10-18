@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\UserRole;
 use App\Models\Part;
 use App\Models\User;
 
@@ -30,5 +31,11 @@ class PartPolicy extends CompanyScopedPolicy
     public function delete(User $user, Part $part): bool
     {
         return $this->belongsToUsersCompany($user, $part);
+    }
+
+    public function adjustInventory(User $user, Part $part): bool
+    {
+        return $user->role === UserRole::Admin
+            && $this->belongsToUsersCompany($user, $part);
     }
 }

@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { Head, Link, router } from '@inertiajs/vue3';
-import { Pencil, Plus, Power, Search, Trash2 } from '@lucide/vue';
+import {
+    History,
+    Pencil,
+    Plus,
+    Power,
+    Search,
+    Trash2,
+    Warehouse,
+} from '@lucide/vue';
 import { ref, watch } from 'vue';
 import Badge from '@/components/ui/badge/Badge.vue';
 import Button from '@/components/ui/button/Button.vue';
 import Card from '@/components/ui/card/Card.vue';
 import Input from '@/components/ui/input/Input.vue';
 import AppLayout from '@/layouts/AppLayout.vue';
+import inventoryAdjustmentRoutes from '@/routes/parts/inventory-adjustment';
 import * as partRoutes from '@/routes/parts';
 
 type Part = {
@@ -19,6 +28,7 @@ type Part = {
     stock_quantity: number;
     aliases: string[] | null;
     is_active: boolean;
+    can_adjust_inventory: boolean;
 };
 
 const props = defineProps<{
@@ -154,6 +164,39 @@ function remove(part: Part): void {
                                 </td>
                                 <td class="p-4">
                                     <div class="flex justify-end gap-1">
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            title="Histórico de estoque"
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="
+                                                    partRoutes.inventoryHistory(
+                                                        part.id,
+                                                    )
+                                                "
+                                            >
+                                                <History class="size-4" />
+                                            </Link>
+                                        </Button>
+                                        <Button
+                                            v-if="part.can_adjust_inventory"
+                                            variant="ghost"
+                                            size="icon"
+                                            title="Ajustar estoque"
+                                            as-child
+                                        >
+                                            <Link
+                                                :href="
+                                                    inventoryAdjustmentRoutes.create(
+                                                        part.id,
+                                                    )
+                                                "
+                                            >
+                                                <Warehouse class="size-4" />
+                                            </Link>
+                                        </Button>
                                         <Button
                                             variant="ghost"
                                             size="icon"
