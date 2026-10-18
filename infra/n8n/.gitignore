@@ -1,0 +1,5 @@
+# Configuracao local com credenciais
+.env
+
+# Backups locais criados seguindo o README
+backups/

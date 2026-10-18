@@ -91,6 +91,25 @@ class IntegrationApiTest extends TestCase
         Carbon::setTestNow();
     }
 
+    public function test_human_whatsapp_message_is_idempotent_and_pauses_the_open_conversation(): void
+    {
+        Carbon::setTestNow('2026-10-17 10:00:00');
+        [$company, $headers] = $this->integrationCompany();
+        $contact = Contact::factory()->for($company)->create(['whatsapp_number' => '5511988887777']);
+        $conversation = Conversation::factory()->for($company)->for($contact)->create();
+        $payload = ['provider_message_id' => 'human-1', 'whatsapp_number' => $contact->whatsapp_number, 'body' => 'Vou assumir este atendimento.', 'occurred_at' => now()->toIso8601String()];
+
+        $this->withHeaders($headers)->postJson('/api/integrations/whatsapp/human-outbound', $payload)->assertCreated();
+        $this->withHeaders($headers)->postJson('/api/integrations/whatsapp/human-outbound', $payload)->assertOk();
+
+        $this->assertDatabaseCount('messages', 1);
+        $this->assertDatabaseHas('messages', ['conversation_id' => $conversation->id, 'sender' => 'human', 'provider_message_id' => 'human-1']);
+        $conversation->refresh();
+        $this->assertSame('human_paused', $conversation->automation_state);
+        $this->assertTrue($conversation->human_paused_until->equalTo(now()->addHours(2)));
+        Carbon::setTestNow();
+    }
+
     public function test_summary_validates_its_limit_and_updates_the_conversation(): void
     {
         [$company, $headers] = $this->integrationCompany();

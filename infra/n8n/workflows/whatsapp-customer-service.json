@@ -1,0 +1,104 @@
+{
+  "name": "WhatsApp Customer Service",
+  "active": false,
+  "settings": { "executionOrder": "v1" },
+  "nodes": [
+    {
+      "id": "webhook", "name": "WAHA webhook", "type": "n8n-nodes-base.webhook", "typeVersion": 2,
+      "position": [0, 300],
+      "parameters": { "httpMethod": "POST", "path": "waha", "responseMode": "responseNode", "options": {} }
+    },
+    {
+      "id": "ack", "name": "Respond 200 immediately", "type": "n8n-nodes-base.respondToWebhook", "typeVersion": 1.1,
+      "position": [220, 300],
+      "parameters": { "respondWith": "json", "responseBody": "={\"received\":true}", "options": { "responseCode": 200 } }
+    },
+    {
+      "id": "normalize", "name": "Validate and normalize WAHA event", "type": "n8n-nodes-base.code", "typeVersion": 2,
+      "position": [440, 300],
+      "parameters": { "jsCode": "const input = $input.first().json;\nconst payload = input.body ?? input;\nconst headers = input.headers ?? {};\nconst suppliedSecret = headers['x-waha-webhook-secret'] ?? headers['X-WAHA-Webhook-Secret'];\nif (!suppliedSecret || suppliedSecret !== $env.WAHA_WEBHOOK_SECRET) return [{ json: { action: 'ignore' } }];\nconst message = payload.payload ?? {};\nconst chatId = message.chatId ?? message.from ?? '';\nconst text = message.body ?? message.text ?? '';\nconst providerMessageId = message.id ?? payload.id;\nconst fromMe = message.fromMe === true || message.fromMe === 1;\nconst source = message.source ?? payload.source ?? '';\nconst isDirectMessage = chatId.endsWith('@c.us');\nconst isMessage = (payload.event === 'message' || payload.event === 'message.any') && Boolean(providerMessageId) && Boolean(text) && isDirectMessage;\nconst action = !isMessage ? 'ignore' : fromMe ? (source === 'api' ? 'ignore' : 'human_outbound') : 'inbound';\nreturn [{ json: { action, provider_message_id: String(providerMessageId), whatsapp_number: chatId.replace(/@.*/, '').replace(/\\D/g, ''), contact_name: message._data?.notifyName ?? message.notifyName ?? null, body: String(text).trim(), occurred_at: new Date(Number(message.timestamp ?? payload.timestamp ?? Date.now()) * (Number(message.timestamp ?? payload.timestamp ?? Date.now()) < 100000000000 ? 1000 : 1)).toISOString() } }];" }
+    },
+    {
+      "id": "route", "name": "Route event", "type": "n8n-nodes-base.switch", "typeVersion": 3.2,
+      "position": [660, 300],
+      "parameters": { "rules": { "values": [
+        { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "inbound", "operator": { "type": "string", "operation": "equals" } }] }, "renameOutput": true, "outputKey": "inbound" },
+        { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.action }}", "rightValue": "human_outbound", "operator": { "type": "string", "operation": "equals" } }] }, "renameOutput": true, "outputKey": "human" }
+      ] }, "options": { "fallbackOutput": "extra" } }
+    },
+    {
+      "id": "human", "name": "Register human message and pause", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+      "position": [900, 440],
+      "parameters": { "method": "POST", "url": "={{ $env.LARAVEL_INTEGRATIONS_URL || 'http://host.docker.internal:8000/api/integrations' }}/whatsapp/human-outbound", "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-Integration-Token", "value": "={{ $env.LARAVEL_INTEGRATION_TOKEN }}" }] }, "sendBody": true, "contentType": "json", "jsonBody": "={{ $json }}", "options": { "allowUnauthorizedCerts": false } }
+    },
+    {
+      "id": "inbound", "name": "Store customer inbound", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+      "position": [900, 180],
+      "parameters": { "method": "POST", "url": "={{ $env.LARAVEL_INTEGRATIONS_URL || 'http://host.docker.internal:8000/api/integrations' }}/whatsapp/inbound", "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-Integration-Token", "value": "={{ $env.LARAVEL_INTEGRATION_TOKEN }}" }] }, "sendBody": true, "contentType": "json", "jsonBody": "={{ JSON.stringify({ provider_message_id: $node['Validate and normalize WAHA event'].json.provider_message_id, whatsapp_number: $node['Validate and normalize WAHA event'].json.whatsapp_number, contact_name: $node['Validate and normalize WAHA event'].json.contact_name || undefined, body: $node['Validate and normalize WAHA event'].json.body, occurred_at: $node['Validate and normalize WAHA event'].json.occurred_at }) }}", "options": {} }
+    },
+    {
+      "id": "paused", "name": "Conversation is paused?", "type": "n8n-nodes-base.if", "typeVersion": 2.2,
+      "position": [1120, 180],
+      "parameters": { "conditions": { "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" }, "conditions": [{ "leftValue": "={{ $json.automation_state }}", "rightValue": "human_paused", "operator": { "type": "string", "operation": "equals" } }] }, "options": {} }
+    },
+    {
+      "id": "context", "name": "Get Laravel context", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+      "position": [1340, 100],
+      "parameters": { "method": "GET", "url": "={{ $env.LARAVEL_INTEGRATIONS_URL || 'http://host.docker.internal:8000/api/integrations' }}/conversations/{{ $node['Store customer inbound'].json.conversation_id }}/context", "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-Integration-Token", "value": "={{ $env.LARAVEL_INTEGRATION_TOKEN }}" }] }, "options": {} }
+    },
+    {
+      "id": "agent", "name": "Economical parts agent", "type": "@n8n/n8n-nodes-langchain.agent", "typeVersion": 1.7,
+      "position": [1570, 100],
+      "parameters": { "promptType": "define", "text": "=Customer message: {{ $node['Validate and normalize WAHA event'].json.body }}\nSummary: {{ $json.ai_summary || '(none)' }}\nLast messages: {{ JSON.stringify($json.messages) }}", "options": { "systemMessage": "You are a concise Portuguese WhatsApp parts assistant. You may only state part names, models, prices, availability, or handoff confirmation returned by your tools. For catalog questions, call Search parts. If a human is requested or needed, call Transfer to human and say only that a human will continue. Never invent availability, price, policy, or facts." } }
+    },
+    {
+      "id": "model", "name": "OpenAI economical model", "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi", "typeVersion": 1.2,
+      "position": [1510, 300],
+      "parameters": { "model": "gpt-4o-mini", "options": { "temperature": 0.1, "maxTokens": 300 } }
+    },
+    {
+      "id": "search-tool", "name": "Search parts", "type": "@n8n/n8n-nodes-langchain.toolHttpRequest", "typeVersion": 1.1,
+      "position": [1700, 300],
+      "parameters": { "name": "search_parts", "description": "Search up to three active in-stock parts. Use the returned data exactly.", "method": "GET", "url": "={{ $env.LARAVEL_INTEGRATIONS_URL || 'http://host.docker.internal:8000/api/integrations' }}/parts/search?q={{ $fromAI('query', 'Search words such as part, phone model or SKU', 'string') }}", "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-Integration-Token", "value": "={{ $env.LARAVEL_INTEGRATION_TOKEN }}" }] } }
+    },
+    {
+      "id": "handoff-tool", "name": "Transfer to human", "type": "@n8n/n8n-nodes-langchain.toolHttpRequest", "typeVersion": 1.1,
+      "position": [1880, 300],
+      "parameters": { "name": "transfer_to_human", "description": "Pause this conversation for two hours and transfer it to a human attendant.", "method": "POST", "url": "={{ $env.LARAVEL_INTEGRATIONS_URL || 'http://host.docker.internal:8000/api/integrations' }}/conversations/{{ $node['Store customer inbound'].json.conversation_id }}/handoff", "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-Integration-Token", "value": "={{ $env.LARAVEL_INTEGRATION_TOKEN }}" }] } }
+    },
+    {
+      "id": "persist", "name": "Persist bot response", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+      "position": [1800, 100],
+      "parameters": { "method": "POST", "url": "={{ $env.LARAVEL_INTEGRATIONS_URL || 'http://host.docker.internal:8000/api/integrations' }}/conversations/{{ $node['Store customer inbound'].json.conversation_id }}/messages", "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-Integration-Token", "value": "={{ $env.LARAVEL_INTEGRATION_TOKEN }}" }] }, "sendBody": true, "contentType": "json", "jsonBody": "={\"body\": {{ JSON.stringify($node['Economical parts agent'].json.output) }}, \"sender\": \"bot\", \"provider_message_id\": \"bot-{{ $node['Validate and normalize WAHA event'].json.provider_message_id }}\"}", "options": {} }
+    },
+    {
+      "id": "send", "name": "Send through WAHA", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+      "position": [2020, 100],
+      "parameters": { "method": "POST", "url": "={{ $env.WAHA_API_URL || 'http://waha:3000' }}/api/sendText", "authentication": "predefinedCredentialType", "nodeCredentialType": "httpHeaderAuth", "sendBody": true, "contentType": "json", "jsonBody": "={\"session\": \"{{ $env.WAHA_SESSION }}\", \"chatId\": \"{{ $node['Validate and normalize WAHA event'].json.whatsapp_number }}@c.us\", \"text\": {{ JSON.stringify($node['Economical parts agent'].json.output) }}}", "options": { "continueOnFail": true } }
+    },
+    {
+      "id": "summary", "name": "Update Laravel summary", "type": "n8n-nodes-base.httpRequest", "typeVersion": 4.2,
+      "position": [2240, 100],
+      "parameters": { "method": "POST", "url": "={{ $env.LARAVEL_INTEGRATIONS_URL || 'http://host.docker.internal:8000/api/integrations' }}/conversations/{{ $node['Store customer inbound'].json.conversation_id }}/summary", "sendHeaders": true, "headerParameters": { "parameters": [{ "name": "X-Integration-Token", "value": "={{ $env.LARAVEL_INTEGRATION_TOKEN }}" }] }, "sendBody": true, "contentType": "json", "jsonBody": "={\"ai_summary\": {{ JSON.stringify(('Customer: ' + $node['Validate and normalize WAHA event'].json.body + '\\nAssistant: ' + $node['Economical parts agent'].json.output).slice(-5000)) } }", "options": { "continueOnFail": true } }
+    }
+  ],
+  "connections": {
+    "WAHA webhook": { "main": [[{ "node": "Respond 200 immediately", "type": "main", "index": 0 }]] },
+    "Respond 200 immediately": { "main": [[{ "node": "Validate and normalize WAHA event", "type": "main", "index": 0 }]] },
+    "Validate and normalize WAHA event": { "main": [[{ "node": "Route event", "type": "main", "index": 0 }]] },
+    "Route event": { "main": [[{ "node": "Store customer inbound", "type": "main", "index": 0 }], [{ "node": "Register human message and pause", "type": "main", "index": 0 }], []] },
+    "Store customer inbound": { "main": [[{ "node": "Conversation is paused?", "type": "main", "index": 0 }]] },
+    "Conversation is paused?": { "main": [[{ "node": "Get Laravel context", "type": "main", "index": 0 }], []] },
+    "Get Laravel context": { "main": [[{ "node": "Economical parts agent", "type": "main", "index": 0 }]] },
+    "Economical parts agent": { "main": [[{ "node": "Persist bot response", "type": "main", "index": 0 }]] },
+    "OpenAI economical model": { "ai_languageModel": [[{ "node": "Economical parts agent", "type": "ai_languageModel", "index": 0 }]] },
+    "Search parts": { "ai_tool": [[{ "node": "Economical parts agent", "type": "ai_tool", "index": 0 }]] },
+    "Transfer to human": { "ai_tool": [[{ "node": "Economical parts agent", "type": "ai_tool", "index": 0 }]] },
+    "Persist bot response": { "main": [[{ "node": "Send through WAHA", "type": "main", "index": 0 }]] },
+    "Send through WAHA": { "main": [[{ "node": "Update Laravel summary", "type": "main", "index": 0 }]] }
+  },
+  "pinData": {},
+  "versionId": "c0f926ce-1f8e-4efc-8a88-7be3a6c4dba9",
+  "meta": { "templateCredsSetupCompleted": false },
+  "tags": []
+}

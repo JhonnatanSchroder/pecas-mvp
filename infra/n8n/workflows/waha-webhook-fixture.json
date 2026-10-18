@@ -1,0 +1,9 @@
+{
+  "description": "POST each event to the n8n test webhook in order with the header X-WAHA-Webhook-Secret set to your WAHA_WEBHOOK_SECRET. The second event is a duplicate and the last is a human message sent from WhatsApp.",
+  "events": [
+    { "id": "evt_customer_001", "timestamp": 1792234800000, "event": "message", "session": "default", "payload": { "id": "false_5511999999999@c.us_3EB0CUSTOMER001", "chatId": "5511999999999@c.us", "from": "5511999999999@c.us", "fromMe": false, "body": "Vocês têm display para iPhone 15?", "timestamp": 1792234800, "_data": { "notifyName": "Maria" } } },
+    { "id": "evt_customer_001_replay", "timestamp": 1792234801000, "event": "message", "session": "default", "payload": { "id": "false_5511999999999@c.us_3EB0CUSTOMER001", "chatId": "5511999999999@c.us", "from": "5511999999999@c.us", "fromMe": false, "body": "Vocês têm display para iPhone 15?", "timestamp": 1792234800, "_data": { "notifyName": "Maria" } } },
+    { "id": "evt_human_001", "timestamp": 1792234860000, "event": "message.any", "session": "default", "payload": { "id": "true_5511999999999@c.us_3EB0HUMAN001", "chatId": "5511999999999@c.us", "fromMe": true, "source": "app", "body": "Oi, Maria. Vou continuar seu atendimento pessoalmente.", "timestamp": 1792234860 } },
+    { "id": "evt_bot_echo_001", "timestamp": 1792234900000, "event": "message.any", "session": "default", "payload": { "id": "true_5511999999999@c.us_3EB0BOT001", "chatId": "5511999999999@c.us", "fromMe": true, "source": "api", "body": "Resposta enviada pelo bot.", "timestamp": 1792234900 } }
+  ]
+}

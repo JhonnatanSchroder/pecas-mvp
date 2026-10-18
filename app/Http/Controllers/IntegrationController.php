@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\Integration\InboundWhatsappRequest;
+use App\Http\Requests\Integration\StoreHumanWhatsappMessageRequest;
 use App\Http\Requests\Integration\StoreIntegrationMessageRequest;
 use App\Http\Requests\Integration\UpdateConversationSummaryRequest;
 use App\Models\Contact;
@@ -128,6 +129,38 @@ class IntegrationController extends Controller
                 ]);
                 $created = true;
             }
+        });
+
+        return response()->json(['message_id' => $message->id, 'conversation_id' => $message->conversation_id], $created ? 201 : 200);
+    }
+
+    public function storeHumanWhatsappMessage(StoreHumanWhatsappMessageRequest $request): JsonResponse
+    {
+        $data = $request->validated();
+        $message = null;
+        $created = false;
+
+        DB::transaction(function () use ($data, &$message, &$created): void {
+            $message = Message::query()->forCurrentCompany()->where('provider_message_id', $data['provider_message_id'])->first();
+            if ($message !== null) {
+                return;
+            }
+
+            $contact = Contact::query()->forCurrentCompany()->where('whatsapp_number', $data['whatsapp_number'])->firstOrFail();
+            $conversation = Conversation::query()->forCurrentCompany()->where('contact_id', $contact->id)->where('status', 'open')->firstOrFail();
+            $conversation->update(['automation_state' => 'human_paused', 'human_paused_until' => now()->addHours(2), 'handled_by' => null]);
+
+            $message = Message::query()->create([
+                'company_id' => $conversation->company_id,
+                'conversation_id' => $conversation->id,
+                'body' => $data['body'],
+                'direction' => 'outbound',
+                'sender' => 'human',
+                'provider_message_id' => $data['provider_message_id'],
+                'created_at' => Carbon::parse($data['occurred_at']),
+                'updated_at' => now(),
+            ]);
+            $created = true;
         });
 
         return response()->json(['message_id' => $message->id, 'conversation_id' => $message->conversation_id], $created ? 201 : 200);
